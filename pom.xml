@@ -14,14 +14,14 @@
         <classgraph.version>4.8.115</classgraph.version>
     </properties>
 
-    <groupId>org.example</groupId>
+    <groupId>org.Kenpachitox</groupId>
     <artifactId>mvn-server-library</artifactId>
     <version>1.0</version>
 
     <distributionManagement>
         <repository>
             <id>github</id>
-            <url>https://maven.pkg.github.com/kenpachitox/mvn-server-library</url>
+            <url>https://maven.pkg.github.com/Kenpachitox/mvn-server-library</url>
         </repository>
     </distributionManagement>
 
