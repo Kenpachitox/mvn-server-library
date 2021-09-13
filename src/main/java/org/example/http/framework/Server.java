@@ -19,6 +19,7 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Log
@@ -138,7 +139,7 @@ public class Server {
         final var serverSocket = new ServerSocket(port)
     ) {
       log.log(Level.INFO, "server started at port: " + serverSocket.getLocalPort());
-      serverSocket.setSoTimeout(3000); //one of the option
+//      serverSocket.setSoTimeout(3000); //one of the option
       while (true) {
         if (!stop){
           final var socket = serverSocket.accept();
@@ -183,7 +184,12 @@ public class Server {
 
         final var method = requestLineParts[0];
         // TODO: uri split ? -> URLDecoder
-        final var uri = requestLineParts[1];
+        final var uri = requestLineParts[1].substring(requestLineParts[1].lastIndexOf("/")+1);
+//        final var uri1 = uri.substring(uri.lastIndexOf("/")+1);
+        Map<String,String> queryMap = Pattern.compile("\\s*&\\s*")
+                .splitAsStream(uri.trim())
+                .map(s -> s.split("=", 2))
+                .collect(Collectors.toMap(a -> a[0], a -> a.length > 1 ? a[1]: ""));
 
         final var headersEndIndex = Bytes.indexOf(buffer, CRLFCRLF, requestLineEndIndex, read) + CRLFCRLF.length;
         if (headersEndIndex == 3) {
@@ -219,13 +225,20 @@ public class Server {
         in.reset();
         in.skipNBytes(headersEndIndex);
         final var body = in.readNBytes(contentLength);
+        final var bodyStr = new String(body,StandardCharsets.UTF_8);
 
+        Map<String,String> bodyMap = Pattern.compile("\\s*&\\s*")
+                .splitAsStream(bodyStr.trim())
+                .map(s -> s.split("=", 2))
+                .collect(Collectors.toMap(a -> a[0], a -> a.length > 1 ? a[1]: ""));
         // TODO: annotation monkey
         final var request = Request.builder()
             .method(method)
             .path(uri)
+            .query(queryMap)
             .headers(headers)
             .body(body)
+            .form(bodyMap)
             .build();
 
         final var response = out;

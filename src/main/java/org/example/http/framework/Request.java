@@ -10,8 +10,10 @@ import java.util.Map;
 public class Request {
   String method;
   String path;
-  // TODO: query
+  Map<String, String> query;
   Map<String, String> headers;
+  Map<String, String> form;
   @Builder.Default
   byte[] body = new byte[]{};
+
 }
