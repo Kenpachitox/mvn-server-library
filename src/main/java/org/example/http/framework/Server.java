@@ -28,6 +28,7 @@ public class Server {
   private static final byte[] CRLFCRLF = new byte[]{'\r', '\n', '\r', '\n'};
   private final static int headersLimit = 4096;
   private final static long bodyLimit = 10 * 1024 * 1024;
+  private ServerSocket serverSocket;
   private final ExecutorService service = Executors.newFixedThreadPool(64, r -> {
     final var thread = new Thread(r);
     thread.setDaemon(true);
@@ -122,12 +123,6 @@ public class Server {
     } catch (NoSuchMethodException e) {
       throw new HandlerRegistrationException(e);
     }
-//    final var map = routes.get(method);
-//    if (map != null) {
-//      map.put(path, handler);
-//      return;
-//    }
-//    routes.put(method, new HashMap<>(Map.of(path, handler)));
   }
 
   public void addArgumentResolver(HandlerMethodArgumentResolver... resolvers) {
@@ -135,29 +130,34 @@ public class Server {
   }
 
   public void listen(int port) {
-    try (
-        final var serverSocket = new ServerSocket(port)
-    ) {
+    try {
+      serverSocket = new ServerSocket(port);
       log.log(Level.INFO, "server started at port: " + serverSocket.getLocalPort());
-//      serverSocket.setSoTimeout(3000); //one of the option
-      while (true) {
-        if (!stop){
-          final var socket = serverSocket.accept();
+      while (!stop) {
+          final Socket socket = serverSocket.accept();
           service.submit(() -> handle(socket));
-        } else {
-          serverSocket.close();
-        }
       }
+    } catch (IOException e) {
+      e.printStackTrace();
+    } finally {
+      try {
+        serverSocket.close();
+      } catch (IOException e) {
+        throw new ServerException(e);
+      }
+    }
+  }
+
+
+  public void stop() {
+    this.stop = true;
+    service.shutdownNow();
+    try {
+      serverSocket.close();
     } catch (IOException e) {
       throw new ServerException(e);
     }
   }
-
-  public void stop() throws InterruptedException {
-    this.stop = true;
-    service.shutdownNow();
-
-    }
 
   public void handle(final Socket socket) {
     try (
