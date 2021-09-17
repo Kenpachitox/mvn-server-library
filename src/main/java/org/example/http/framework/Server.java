@@ -14,12 +14,13 @@ import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URLDecoder;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Log
@@ -163,7 +164,7 @@ public class Server {
     try (
         socket;
         final var in = new BufferedInputStream(socket.getInputStream());
-        final var out = new BufferedOutputStream(socket.getOutputStream());
+        final var out = new BufferedOutputStream(socket.getOutputStream())
     ) {
       log.log(Level.INFO, "connected: " + socket.getPort());
       final var buffer = new byte[headersLimit];
@@ -186,10 +187,6 @@ public class Server {
         // TODO: uri split ? -> URLDecoder
         final var uri = requestLineParts[1].substring(requestLineParts[1].lastIndexOf("/")+1);
 //        final var uri1 = uri.substring(uri.lastIndexOf("/")+1);
-        Map<String,String> queryMap = Pattern.compile("\\s*&\\s*")
-                .splitAsStream(uri.trim())
-                .map(s -> s.split("=", 2))
-                .collect(Collectors.toMap(a -> a[0], a -> a.length > 1 ? a[1]: ""));
 
         final var headersEndIndex = Bytes.indexOf(buffer, CRLFCRLF, requestLineEndIndex, read) + CRLFCRLF.length;
         if (headersEndIndex == 3) {
@@ -226,26 +223,29 @@ public class Server {
         in.skipNBytes(headersEndIndex);
         final var body = in.readNBytes(contentLength);
         final var bodyStr = new String(body,StandardCharsets.UTF_8);
+        final var queryMap = parseQuery(uri);
+        Map<String,List<String>> formMap = new HashMap<>();
 
-        Map<String,String> bodyMap = Pattern.compile("\\s*&\\s*")
-                .splitAsStream(bodyStr.trim())
-                .map(s -> s.split("=", 2))
-                .collect(Collectors.toMap(a -> a[0], a -> a.length > 1 ? a[1]: ""));
+        if (headers.get("Content-Type").equals("application/x-www-form-urlencoded")){
+          formMap = parseQuery(bodyStr);
+        }
+
+
         // TODO: annotation monkey
         final var request = Request.builder()
-            .method(method)
-            .path(uri)
-            .query(queryMap)
-            .headers(headers)
-            .body(body)
-            .form(bodyMap)
-            .build();
+                .method(method)
+                .path(uri)
+                .headers(headers)
+                .query(queryMap)
+                .form(formMap)
+                .body(body)
+                .build();
 
         final var response = out;
 
         final var handlerMethod = Optional.ofNullable(routes.get(request.getMethod()))
-            .map(o -> o.get(request.getPath()))
-            .orElse(new HandlerMethod(notFoundHandler, notFoundHandler.getClass().getMethod("handle", Request.class, OutputStream.class)));
+                .map(o -> o.get(request.getPath()))
+                .orElse(new HandlerMethod(notFoundHandler, notFoundHandler.getClass().getMethod("handle", Request.class, OutputStream.class)));
 
         try {
           final var invokableMethod = handlerMethod.getMethod();
@@ -277,16 +277,16 @@ public class Server {
         // language=HTML
         final var html = "<h1>Mailformed request</h1>";
         out.write(
-            (
-                // language=HTTP
-                "HTTP/1.1 400 Bad Request\r\n" +
-                    "Server: nginx\r\n" +
-                    "Content-Length: " + html.length() + "\r\n" +
-                    "Content-Type: text/html; charset=UTF-8\r\n" +
-                    "Connection: close\r\n" +
-                    "\r\n" +
-                    html
-            ).getBytes(StandardCharsets.UTF_8)
+                (
+                        // language=HTTP
+                        "HTTP/1.1 400 Bad Request\r\n" +
+                                "Server: nginx\r\n" +
+                                "Content-Length: " + html.length() + "\r\n" +
+                                "Content-Type: text/html; charset=UTF-8\r\n" +
+                                "Connection: close\r\n" +
+                                "\r\n" +
+                                html
+                ).getBytes(StandardCharsets.UTF_8)
         );
       } catch (NoSuchMethodException e) {
         e.printStackTrace();
@@ -296,5 +296,20 @@ public class Server {
       e.printStackTrace();
       // TODO:
     }
+  }
+
+  private Map<String, List<String>> parseQuery(String uri) {
+      Map<String, List<String>> resultMap = new HashMap<>();
+      if (uri.isEmpty()) {
+        return resultMap;
+      }
+      String decodeUri = URLDecoder.decode(uri, StandardCharsets.UTF_8);
+      for (var paramValue : decodeUri.split("&")) {
+        var paramPair = paramValue.split("=");
+        System.out.println(Arrays.toString(paramPair));
+        resultMap.put(paramPair[0],List.of(paramPair[1]));
+
+      }
+      return resultMap;
   }
 }
